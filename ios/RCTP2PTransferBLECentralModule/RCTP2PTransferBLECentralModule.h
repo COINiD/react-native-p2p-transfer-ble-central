@@ -24,6 +24,8 @@
 
     NSInteger _chunkCount;
     NSInteger _chunkCountTarget;
+
+    BOOL _startedSend;
 }
 
 @end

@@ -58,9 +58,10 @@ class BLECentral extends EventEmitter {
 
 			const { serviceUUID, characteristicUUID } = this.subscribedCharacteristic;
 
-	  	bleCentralEmitter.removeListener('transferStarted');
-	  	bleCentralEmitter.removeListener('transferProgress');
-	  	bleCentralEmitter.removeListener('transferDone');
+	  	bleCentralEmitter.removeAllListeners('transferStarted');
+	  	bleCentralEmitter.removeAllListeners('transferProgress');
+	  	bleCentralEmitter.removeAllListeners('transferDone');
+	  	
 	  	console.log('trying to unsubscribed');
 	  	bleCentralModule.unSubscribeToCharacteristic(serviceUUID, characteristicUUID, () => {
 	  		console.log('unsubscribed...')
@@ -155,7 +156,7 @@ class BLECentral extends EventEmitter {
 				});
 
         bleCentralModule.writeValueForCharacteristic(serviceUUID, characteristicUUID, value, () => {
-        	bleCentralEmitter.removeListener('didWriteValueForCharacteristic');
+        	bleCentralEmitter.removeAllListeners('didWriteValueForCharacteristic');
 
         	this.emit('sendingDone', data);
           resolve();
@@ -186,7 +187,7 @@ class BLECentral extends EventEmitter {
         	}
 
 			    bleCentralEmitter.addListener('transferStarted', (data) => {
-			    	bleCentralEmitter.removeListener('transferStarted');
+			    	bleCentralEmitter.removeAllListeners('transferStarted');
 			    	this.emit('receivingStarted', data);
 			    });
 
@@ -196,8 +197,12 @@ class BLECentral extends EventEmitter {
 
 			    bleCentralEmitter.addListener('transferDone', (data) => {
 			    	this.unsubscribe().then(() => {
-			    		this.emit('receivingDone', data);
-			    		return resolve(data);
+			    		bleCentralModule.writeValueForCharacteristic(serviceUUID, characteristicUUID, 'finished', () => {
+			    			this.disconnect().then(() => {
+					    		this.emit('receivingDone', data);
+					    		return resolve(data);
+			    			});
+			    		});
 			    	})
 			    });
 			  });

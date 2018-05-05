@@ -61,7 +61,7 @@ class BLECentral extends EventEmitter {
 	  	bleCentralEmitter.removeAllListeners('transferStarted');
 	  	bleCentralEmitter.removeAllListeners('transferProgress');
 	  	bleCentralEmitter.removeAllListeners('transferDone');
-	  	
+
 	  	console.log('trying to unsubscribed');
 	  	bleCentralModule.unSubscribeToCharacteristic(serviceUUID, characteristicUUID, () => {
 	  		console.log('unsubscribed...')
@@ -159,7 +159,7 @@ class BLECentral extends EventEmitter {
         	bleCentralEmitter.removeAllListeners('didWriteValueForCharacteristic');
 
         	this.emit('sendingDone', data);
-          resolve();
+          return resolve();
         });
 			});
 		});
@@ -213,7 +213,6 @@ class BLECentral extends EventEmitter {
 			});
 		});
 	}
-
 }
 
 module.exports = new BLECentral();

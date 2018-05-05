@@ -195,6 +195,8 @@ RCT_EXPORT_METHOD(writeValueForCharacteristic:(NSString *)serviceUUID characteri
   NSData *startPayload = [NSData dataWithBytes:&size length:sizeof(size)];
   NSInteger chunkSize = 20;
 
+  _finalSendingBytes = [data length];
+  
   [_callbacks setObject:callback forKey:@"finishedWritingCB"];
 
   _chunkCount = 0;
@@ -582,17 +584,24 @@ RCT_EXPORT_METHOD(unSubscribeToCharacteristic:(NSString *)serviceUUID characteri
 
 
 - (void)peripheral:(CBPeripheral *)peripheral didWriteValueForCharacteristic:(CBCharacteristic *)characteristic error:(NSError *)error {
+  _chunkCount++;
+
   NSMutableDictionary *retObject = [NSMutableDictionary new];
   
   retObject[@"peripheralUUID"] = peripheral.identifier.UUIDString;
   retObject[@"serviceUUID"] = characteristic.service.UUID.UUIDString;
   retObject[@"characteristicUUID"] = characteristic.UUID.UUIDString;
-  retObject[@"writtenSize"] = [NSNumber numberWithInteger: [characteristic.value length]];
+  float progress = ((float)_chunkCount-1)/((float)_chunkCountTarget);
+  int estimatesBytes = progress*((float)_finalSendingBytes);
+    
+  retObject[@"receivedBytes"] = [[NSNumber alloc] initWithUnsignedInteger:estimatesBytes];
+  retObject[@"finalBytes"] = [[NSNumber alloc] initWithUnsignedInteger:_finalSendingBytes];
+
+    NSLog(@"written %lu %d %d %f %d", characteristic.value.length, _finalSendingBytes, _chunkCount, progress, estimatesBytes);
 
   [self sendEventWithName:@"didWriteValueForCharacteristic" body:retObject];
-
-  _chunkCount++;
-  if(_chunkCount == _chunkCountTarget) {
+  
+  if(_chunkCount-1 == _chunkCountTarget) {
     RCTResponseSenderBlock callback = [_callbacks objectForKey:@"finishedWritingCB"];
 
     if (callback) {
@@ -601,5 +610,6 @@ RCT_EXPORT_METHOD(unSubscribeToCharacteristic:(NSString *)serviceUUID characteri
     }
   }
 }
+
 
 @end

@@ -18,6 +18,7 @@
     
     NSMutableData *_receivedData;
     NSNumber *_finalBytes;
+    NSInteger _finalSendingBytes;
 
     BOOL _isPoweredOn;
     NSDictionary *_scanFilter;

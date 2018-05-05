@@ -20,7 +20,6 @@ RCT_EXPORT_MODULE();
       NSLog(@"RCTP2PTransferBLECentralModule created");
       _callbacks = [NSMutableDictionary dictionary];
       _isPoweredOn = NO;
-      _startedSend = NO;
     }
     
     return self;
@@ -35,6 +34,8 @@ RCT_EXPORT_MODULE();
 
 RCT_EXPORT_METHOD(start:(nonnull RCTResponseSenderBlock)callback)
 {
+  _finalBytes = nil;
+
   if(_manager) {
     callback(@[@(_isPoweredOn)]);
     return ;
@@ -107,8 +108,6 @@ RCT_EXPORT_METHOD(connect:(NSString *)peripheralUUID callback:(nonnull RCTRespon
 
 RCT_EXPORT_METHOD(disconnect:(NSString *)peripheralUUID callback:(nonnull RCTResponseSenderBlock)callback)
 {
-  _startedSend = NO;
-
   if(_connectedPeripheral || _connectingPeripheral) {
     [_callbacks setObject:callback forKey:@"didDisconnectPeripheralCB"];
 
@@ -143,18 +142,13 @@ RCT_EXPORT_METHOD(discoverCharacteristics:(NSString *)serviceUUID characteristic
     return ;
   }
 
-  NSLog(@"discoverCharacteristics");
-
   if(characteristicUUID) {
     CBUUID *cbUUID = [CBUUID UUIDWithString:characteristicUUID];
-      NSLog(@"_connectedPeripheral discoverCharacteristics 0");
 
     for (CBService *service in _connectedPeripheral.services) {
-        NSLog(@"_connectedPeripheral discoverCharacteristics 1");
       if([serviceUUID isEqualToString: service.UUID.UUIDString]) {
         [_callbacks setObject:callback forKey:@"discoverCharacteristicsCB"];
         
-        NSLog(@"_connectedPeripheral discoverCharacteristics");
         [_connectedPeripheral discoverCharacteristics:@[cbUUID] forService:service];
         return ;
       }
@@ -162,17 +156,30 @@ RCT_EXPORT_METHOD(discoverCharacteristics:(NSString *)serviceUUID characteristic
   }
 }
 
+// Send to peripheral
 RCT_EXPORT_METHOD(writeValueForCharacteristic:(NSString *)serviceUUID characteristicUUID:(NSString *)characteristicUUID value:(NSString *)value callback:(RCTResponseSenderBlock)callback)
 {
   CBCharacteristic *characteristic = [self findCharacteristic:serviceUUID characteristicUUID:characteristicUUID];
   
-  if(characteristic) {
-    [self sendValueInChunks:
-      [value dataUsingEncoding:NSUTF8StringEncoding]
-      forCharacteristic:characteristic
-      callback: callback
-    ];
+  if(!characteristic) {
+    return ;
   }
+
+  [self sendValueInChunks:
+    [value dataUsingEncoding:NSUTF8StringEncoding]
+    forCharacteristic:characteristic
+    callback: callback
+  ];
+}
+
+RCT_EXPORT_METHOD(setSendCharacteristic:(NSString *)characteristicUUID)
+{
+  _sendCharacteristicUUID = characteristicUUID;
+}
+
+RCT_EXPORT_METHOD(setReceiveCharacteristic:(NSString *)characteristicUUID)
+{
+  _receiveCharacteristicUUID = characteristicUUID;
 }
 
 
@@ -304,9 +311,7 @@ RCT_EXPORT_METHOD(unSubscribeToCharacteristic:(NSString *)serviceUUID characteri
 
 
 - (void) centralManager:(CBCentralManager *)central didDiscoverPeripheral:(CBPeripheral *)peripheral advertisementData:(NSDictionary *)advertisementData RSSI:(NSNumber *)RSSI 
-{
-  NSLog(@"didDiscoverPeripheral");
-  
+{  
   /*
   // Reject any where outisde reasonable range
   if (RSSI.integerValue > -15 || RSSI.integerValue < -35) {
@@ -548,13 +553,16 @@ RCT_EXPORT_METHOD(unSubscribeToCharacteristic:(NSString *)serviceUUID characteri
 }
 
 - (void)peripheral:(CBPeripheral *)peripheral didUpdateValueForCharacteristic:(CBCharacteristic *)characteristic error:(NSError *)error {
+  if(!_receiveCharacteristicUUID || ![_receiveCharacteristicUUID isEqualToString:characteristic.UUID.UUIDString]) {
+    return ;
+  }
+
   NSMutableDictionary *retObject = [NSMutableDictionary new];
   retObject[@"peripheralUUID"] = peripheral.identifier.UUIDString;
   retObject[@"serviceUUID"] = characteristic.service.UUID.UUIDString;
   retObject[@"characteristicUUID"] = characteristic.UUID.UUIDString;
 
-  if(_startedSend == NO) {
-    _startedSend = YES;
+  if(_finalBytes == nil) {
     UInt32 size;
     [characteristic.value getBytes:&size length:sizeof(size)];
 
@@ -573,12 +581,13 @@ RCT_EXPORT_METHOD(unSubscribeToCharacteristic:(NSString *)serviceUUID characteri
   [self sendEventWithName:@"transferProgress" body:retObject];
 
   if([receivedBytes isEqualToNumber:_finalBytes]) {
-    _startedSend = NO;
-
     NSString *stringFromData = [[NSString alloc] initWithData:_receivedData encoding:NSUTF8StringEncoding];
     retObject[@"value"] = stringFromData;
 
     [self sendEventWithName:@"transferDone" body:retObject];
+
+    _finalBytes = nil;
+    _receivedData = nil;
   }
 }
 
@@ -591,6 +600,7 @@ RCT_EXPORT_METHOD(unSubscribeToCharacteristic:(NSString *)serviceUUID characteri
   retObject[@"peripheralUUID"] = peripheral.identifier.UUIDString;
   retObject[@"serviceUUID"] = characteristic.service.UUID.UUIDString;
   retObject[@"characteristicUUID"] = characteristic.UUID.UUIDString;
+
   float progress = ((float)_chunkCount-1)/((float)_chunkCountTarget);
   int estimatesBytes = progress*((float)_finalSendingBytes);
     
@@ -599,7 +609,7 @@ RCT_EXPORT_METHOD(unSubscribeToCharacteristic:(NSString *)serviceUUID characteri
 
   [self sendEventWithName:@"didWriteValueForCharacteristic" body:retObject];
   
-  if(_chunkCount-1 == _chunkCountTarget) {
+  if(_chunkCount == _chunkCountTarget) {
     RCTResponseSenderBlock callback = [_callbacks objectForKey:@"finishedWritingCB"];
 
     if (callback) {

@@ -138,13 +138,15 @@ class BLECentral extends EventEmitter {
 	}
 
 	sendData = (value, filter) => {
-		const {serviceUUID, localName} = filter;
-		const characteristicUUID = '3333'; // Special characteristic for sending data. Peripheral listens to this.
-
 		return new Promise((resolve, reject) => {
+      const {serviceUUID, localName} = filter;
+      const characteristicUUID = '3333'; // Special characteristic for sending data. Peripheral listens to this.
+
 			if(!serviceUUID) {
 				return reject("serviceUUID required filter");
 			}
+
+      bleCentralModule.setSendCharacteristic(characteristicUUID);
 
 			this.connectAndDiscover({serviceUUID, localName, characteristicUUID})
 			.then(data => {
@@ -166,14 +168,16 @@ class BLECentral extends EventEmitter {
 	}
 
 	receiveData = (filter) => {
-		const {serviceUUID, localName} = filter;
-		const characteristicUUID = '2222'; // Special characteristic for receiving data. Peripheral starts sending once Central subscribes.
-
 		return new Promise((resolve, reject) => {
+      const {serviceUUID, localName} = filter;
+      const characteristicUUID = '2222'; // Special characteristic for receiving data. Peripheral starts sending once Central subscribes.
+
 			if(!serviceUUID) {
 				return reject("serviceUUID required filter");
 			}
 			
+      bleCentralModule.setReceiveCharacteristic(characteristicUUID);
+
 			this.connectAndDiscover({serviceUUID, localName, characteristicUUID})
 			.then(data => {
 

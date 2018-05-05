@@ -27,6 +27,9 @@
     NSInteger _chunkCountTarget;
 
     BOOL _startedSend;
+
+    NSString *_sendCharacteristicUUID;
+    NSString *_receiveCharacteristicUUID;
 }
 
 @end

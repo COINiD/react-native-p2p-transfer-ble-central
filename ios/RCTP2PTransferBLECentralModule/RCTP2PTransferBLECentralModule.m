@@ -597,8 +597,6 @@ RCT_EXPORT_METHOD(unSubscribeToCharacteristic:(NSString *)serviceUUID characteri
   retObject[@"receivedBytes"] = [[NSNumber alloc] initWithUnsignedInteger:estimatesBytes];
   retObject[@"finalBytes"] = [[NSNumber alloc] initWithUnsignedInteger:_finalSendingBytes];
 
-    NSLog(@"written %lu %d %d %f %d", characteristic.value.length, _finalSendingBytes, _chunkCount, progress, estimatesBytes);
-
   [self sendEventWithName:@"didWriteValueForCharacteristic" body:retObject];
   
   if(_chunkCount-1 == _chunkCountTarget) {

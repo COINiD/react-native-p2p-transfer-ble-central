@@ -200,7 +200,7 @@ RCT_EXPORT_METHOD(setReceiveCharacteristic:(NSString *)characteristicUUID)
 - (void)sendValueInChunks:(NSData *)data forCharacteristic:(CBMutableCharacteristic *)forCharacteristic callback:(nonnull RCTResponseSenderBlock)callback{
   UInt32 size = [data length];
   NSData *startPayload = [NSData dataWithBytes:&size length:sizeof(size)];
-  NSInteger chunkSize = 20;
+  NSInteger chunkSize = 20; // [_connectedPeripheral maximumWriteValueLengthForType: CBCharacteristicWriteWithResponse]; <-- fails, too large? keeping it safe with 20; might need to do a manual negotiation for mtu size.
 
   _finalSendingBytes = [data length];
   

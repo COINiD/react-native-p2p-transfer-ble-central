@@ -69,7 +69,7 @@ class BLECentral extends EventEmitter {
 	  		return resolve();
 	  	});
 	  });
-  }
+    }
 
 	connect = (filter) => {
 		const {serviceUUID, localName} = filter;

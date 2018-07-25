@@ -149,10 +149,10 @@ class BLECentral extends EventEmitter {
     });
   }
 
-  sendData = (value, filter) => {
+  sendData = (value, filter, sendCharacteristicUUID) => {
     return new Promise((resolve, reject) => {
       const {serviceUUID, localName} = filter;
-      const characteristicUUID = '3333'; // Special characteristic for sending data. Peripheral listens to this.
+      const characteristicUUID = sendCharacteristicUUID ? sendCharacteristicUUID : '3333'; // Special characteristic for sending data. Peripheral listens to this.
 
       if(!serviceUUID) {
         return reject("serviceUUID required filter");
@@ -198,11 +198,11 @@ class BLECentral extends EventEmitter {
     });
   }
 
-  receiveData = (filter) => {
+  receiveData = (filter, receiveCharacteristicUUID) => {
     return new Promise((resolve, reject) => {
 
       const {serviceUUID, localName} = filter;
-      const characteristicUUID = '2222'; // Special characteristic for receiving data. Peripheral starts sending once Central subscribes.
+      const characteristicUUID = receiveCharacteristicUUID ? receiveCharacteristicUUID : '2222'; // Special characteristic for receiving data. Peripheral starts sending once Central subscribes.
 
       if(!serviceUUID) {
         return reject("serviceUUID required filter");

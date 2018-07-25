@@ -109,11 +109,15 @@ class BLECentral extends EventEmitter {
   }
 
   discover = (serviceUUID, characteristicUUID) => {
+    console.log("start discover serv...");
+
     return new Promise((resolve, reject) => {
       bleCentralModule.discoverServices(serviceUUID, data => {
+        // should reject if error
         console.log("discovered serv...", data);
             
         bleCentralModule.discoverCharacteristics(serviceUUID, characteristicUUID, (data) => {
+          // should reject if error
           console.log("discover char...", data);
           return resolve(data);
         });
@@ -150,14 +154,17 @@ class BLECentral extends EventEmitter {
 
       this.connectAndDiscover({serviceUUID, localName, characteristicUUID})
       .then(data => {
-        console.log("discovered serv...", data);
+        console.log("sendingStarted", data);
         this.emit('sendingStarted', data);
 
         bleCentralEmitter.addListener('didWriteValueForCharacteristic', (data) => {
+          console.log('sendingProgress', data);
           this.emit('sendingProgress', data);
         });
 
         bleCentralModule.writeValueForCharacteristic(serviceUUID, characteristicUUID, value, () => {
+          console.log('sendingDone', data);
+          
           bleCentralEmitter.removeAllListeners('didWriteValueForCharacteristic');
 
           this.emit('sendingDone', data);
@@ -169,6 +176,7 @@ class BLECentral extends EventEmitter {
 
   receiveData = (filter) => {
     return new Promise((resolve, reject) => {
+
       const {serviceUUID, localName} = filter;
       const characteristicUUID = '2222'; // Special characteristic for receiving data. Peripheral starts sending once Central subscribes.
 
@@ -180,6 +188,7 @@ class BLECentral extends EventEmitter {
 
       this.connectAndDiscover({serviceUUID, localName, characteristicUUID})
       .then(data => {
+        console.log('woop');
 
         bleCentralModule.subscribeToCharacteristic(serviceUUID, characteristicUUID, (data) => {
           console.log("subscribed...", data);
@@ -191,15 +200,21 @@ class BLECentral extends EventEmitter {
           }
 
           bleCentralEmitter.addListener('transferStarted', (data) => {
+            console.log('transferStarted', data);
             bleCentralEmitter.removeAllListeners('transferStarted');
+
             this.emit('receivingStarted', data);
           });
 
           bleCentralEmitter.addListener('transferProgress', (data) => {
+            console.log('transferProgress', data);
+
             this.emit('receivingProgress', data);
           });
 
           bleCentralEmitter.addListener('transferDone', (data) => {
+            console.log('transferDone', data);
+
             this.unsubscribe().then(() => {
               bleCentralModule.writeValueForCharacteristic(serviceUUID, characteristicUUID, 'finished', () => {
                 this.disconnect().then(() => {

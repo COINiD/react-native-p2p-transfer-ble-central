@@ -137,11 +137,23 @@ public class RCTP2PTransferBLECentralModule extends ReactContextBaseJavaModule {
       this.mAdapter = this.mManager.getAdapter();
     }
 
+    if (null == this.mAdapter) {
+      return -3;
+    }
+
+    if (null == this.mLeScanner) {
+      this.mLeScanner = this.mAdapter.getBluetoothLeScanner();
+    }
+
+    if (null == this.mLeScanner) {
+      return -4;
+    }
+
     this.mConnectionMtu = 23;
     this.mFinalBytes = 0;
     this.mReceivedData = null;
     this.mReceivedBytes = 0;
-    this.mLeScanner = this.mAdapter.getBluetoothLeScanner();
+    
 
     return 0;
   }
@@ -152,12 +164,12 @@ public class RCTP2PTransferBLECentralModule extends ReactContextBaseJavaModule {
   }
 
   @ReactMethod
-  void setSendCharacteristic(String characteristicUUID) {
+  public void setSendCharacteristic(String characteristicUUID) {
     this.mSendCharacteristicUUID = getUUIDStringFromSimple(characteristicUUID);
   }
 
   @ReactMethod
-  void setReceiveCharacteristic(String characteristicUUID) {
+  public void setReceiveCharacteristic(String characteristicUUID) {
     this.mReceiveCharacteristicUUID = getUUIDStringFromSimple(characteristicUUID);
   }
 
@@ -172,17 +184,17 @@ public class RCTP2PTransferBLECentralModule extends ReactContextBaseJavaModule {
   }
 
   @ReactMethod
-  void start(Callback callback) {
-    if (null == this.mAdapter || !this.mAdapter.isEnabled()) {
+  public void start(Callback callback) {
+    if(this.init() != 0) {
       callback.invoke(false);
       return;
-    }
+    };
 
     callback.invoke(true);
   }
 
   @ReactMethod
-  private void scanForPeripheralsWithServices(ReadableMap scanFilter, Callback callback) {
+  public void scanForPeripheralsWithServices(ReadableMap scanFilter, Callback callback) {
     String serviceUUID = null;
 
     if(scanFilter != null) {
@@ -214,119 +226,198 @@ public class RCTP2PTransferBLECentralModule extends ReactContextBaseJavaModule {
   }
 
   @ReactMethod
-  private void stopScan() {
+  public void stopScan() {
     this.mLeScanner.stopScan(mLeScanCallback);
   }
 
 
   @ReactMethod
   public void connect(String peripheralUUID, Callback callback) {
+    Log.d("connect", peripheralUUID);
     if (this.mGatt == null) {
+      Log.d("connect", "trying to connect");
       this.mDidConnectPeripheralCB = callback;
       this.mGatt = this.mPeripheral.connectGatt(this.mContext, false, gattCallback, BluetoothDevice.TRANSPORT_LE);
+
+      final Callback finalCb = callback;
+      final RCTP2PTransferBLECentralModule self = this;
+
+      new android.os.Handler().postDelayed(new Runnable() { public void run() {
+        if(self.mDidConnectPeripheralCB == finalCb) {
+          self.connectionTimeout();
+        }
+      } }, 6000);
     }
     else {
+      Log.e("connect", "already connected...");
       callback.invoke(this.mGatt.getDevice().toString());
     }
   }
 
+  private void connectionTimeout() {
+    Log.e("connectionTimeout", "took to long...");
+    if(this.mDidConnectPeripheralCB != null) {
+      this.mDidConnectPeripheralCB.invoke();
+      this.mDidConnectPeripheralCB = null;
+      this.closeGatt();
+    }
+  }
+
   @ReactMethod
-  void discoverServices(String serviceUUID, Callback callback) {
+  public void disconnect(String peripheralUUID, Callback callback) {
+    if(this.mGatt != null) {
+      this.mDidDisconnectPeripheralCB = callback;
+
+      this.mGatt.disconnect();
+
+      final Callback finalCb = callback;
+      final RCTP2PTransferBLECentralModule self = this;
+
+      new android.os.Handler().postDelayed(new Runnable() { public void run() {
+        if(self.mDidDisconnectPeripheralCB == finalCb) {
+          self.closeGatt();
+        }
+      } }, 6000);
+    }
+    else {
+      callback.invoke();
+    }
+  }
+
+  @ReactMethod
+  public void discoverServices(String serviceUUID, Callback callback) {
     if (this.mGatt == null) {
+      callback.invoke(false);
       return ;
     }
 
-    if(serviceUUID != null) {
-      serviceUUID = getUUIDStringFromSimple(serviceUUID);
-
-      this.mDiscoverServicesCB = callback;
-      this.mDiscoverServiceUUID = serviceUUID;
-
-      this.mGatt.discoverServices();
+    if(serviceUUID == null) {
+      callback.invoke(false);
+      return ;
     }
+
+    serviceUUID = getUUIDStringFromSimple(serviceUUID);
+
+    this.mDiscoverServicesCB = callback;
+    this.mDiscoverServiceUUID = serviceUUID;
+
+    this.mGatt.discoverServices();
+
+    // timout to reject???
   }
 
   @ReactMethod
-  void discoverCharacteristics(String serviceUUID, String characteristicUUID, Callback callback) {
+  public void discoverCharacteristics(String serviceUUID, String characteristicUUID, Callback callback) {
+    if(mGattService == null) {
+      callback.invoke(false);
+      return ;
+    }
+
     serviceUUID = getUUIDStringFromSimple(serviceUUID);
     characteristicUUID = getUUIDStringFromSimple(characteristicUUID);
 
     BluetoothGattCharacteristic characteristic = mGattService.getCharacteristic(UUID.fromString(characteristicUUID));
 
-    if(characteristic != null) {
-      this.mGattCharacteristic = characteristic;
-      callback.invoke(characteristic.getUuid().toString());
+    if(characteristic == null) {
+      callback.invoke(false);
+      return ;
     }
+
+    this.mGattCharacteristic = characteristic;
+    callback.invoke(characteristic.getUuid().toString());    
   }
 
   @ReactMethod
-  void subscribeToCharacteristic(String serviceUUID, String characteristicUUID, Callback callback) {
+  public void subscribeToCharacteristic(String serviceUUID, String characteristicUUID, Callback callback) {
+    if(mGattService == null) {
+      callback.invoke(false);
+      return ;
+    }
+
     serviceUUID = getUUIDStringFromSimple(serviceUUID);
     characteristicUUID = getUUIDStringFromSimple(characteristicUUID);
 
     BluetoothGattCharacteristic characteristic = mGattService.getCharacteristic(UUID.fromString(characteristicUUID));
 
-    if(characteristic != null) {
-      this.mGattCharacteristic = characteristic;
-
-      // Enable to receive notifications locally
-      Boolean setLocalNotification = this.mGatt.setCharacteristicNotification(characteristic, true);
-
-      if(setLocalNotification != true) {
-        // error
-        callback.invoke();
-        return ;
-      }
-
-      // Let remote device know we are ready to receive notifications.
-      BluetoothGattDescriptor descriptor = characteristic.getDescriptor(DESCRIPTOR_CONFIG_UUID);
-      descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
-      Boolean setRemoteNotification = this.mGatt.writeDescriptor(descriptor);
-
-      if(setRemoteNotification != true) {
-        // error
-        callback.invoke();
-        return ;
-      }
-
-      this.mSubscribeToCharacteristicCB = callback;
+    if(characteristic == null) {
+      callback.invoke(false);
+      return ;
     }
+  
+    this.mGattCharacteristic = characteristic;
+
+    // Enable to receive notifications locally
+    Boolean setLocalNotification = this.mGatt.setCharacteristicNotification(characteristic, true);
+
+    if(setLocalNotification != true) {
+      // error
+      callback.invoke(false);
+      return ;
+    }
+
+    // Let remote device know we are ready to receive notifications.
+    BluetoothGattDescriptor descriptor = characteristic.getDescriptor(DESCRIPTOR_CONFIG_UUID);
+    if(descriptor == null) {
+      callback.invoke(false);
+      return ;
+    }
+
+    descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+    Boolean setRemoteNotification = this.mGatt.writeDescriptor(descriptor);
+
+    if(setRemoteNotification != true) {
+      // error
+      callback.invoke(false);
+      return ;
+    }
+
+    this.mSubscribeToCharacteristicCB = callback;
   }
 
 
   @ReactMethod
-  void unSubscribeToCharacteristic(String serviceUUID, String characteristicUUID, Callback callback) {
+  public void unSubscribeToCharacteristic(String serviceUUID, String characteristicUUID, Callback callback) {
+    if(mGattService == null) {
+      return ;
+    }
+
     serviceUUID = getUUIDStringFromSimple(serviceUUID);
     characteristicUUID = getUUIDStringFromSimple(characteristicUUID);
 
     BluetoothGattCharacteristic characteristic = mGattService.getCharacteristic(UUID.fromString(characteristicUUID));
 
-    if(characteristic != null) {
-      this.mGattCharacteristic = null;
-
-      if(this.mGatt.setCharacteristicNotification(characteristic, false) != true) {
-        callback.invoke();
-        return ;
-      }
-
-      // Let remote device know we are ready to receive notifications.
-      BluetoothGattDescriptor descriptor = characteristic.getDescriptor(DESCRIPTOR_CONFIG_UUID);
-      descriptor.setValue(BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE);
-      Boolean setRemoteNotification = this.mGatt.writeDescriptor(descriptor);
-
-      if(setRemoteNotification != true) {
-        // error
-        callback.invoke();
-        return ;
-      }
-
-      this.mUnSubscribeToCharacteristicCB = callback;
+    if(characteristic == null) {
+      return ;
     }
+
+    this.mGattCharacteristic = null;
+
+    if(this.mGatt.setCharacteristicNotification(characteristic, false) != true) {
+      callback.invoke();
+      return ;
+    }
+
+    // Let remote device know we are ready to receive notifications.
+    BluetoothGattDescriptor descriptor = characteristic.getDescriptor(DESCRIPTOR_CONFIG_UUID);
+    descriptor.setValue(BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE);
+    Boolean setRemoteNotification = this.mGatt.writeDescriptor(descriptor);
+
+    if(setRemoteNotification != true) {
+      // error
+      callback.invoke();
+      return ;
+    }
+
+    this.mUnSubscribeToCharacteristicCB = callback;
   }
 
   // Send to peripheral
   @ReactMethod
   void writeValueForCharacteristic(String serviceUUID, String characteristicUUID, String value, Callback callback) {
+    if(mGattService == null) {
+      return ;
+    }
+
     serviceUUID = getUUIDStringFromSimple(serviceUUID);
     characteristicUUID = getUUIDStringFromSimple(characteristicUUID);
 
@@ -339,14 +430,19 @@ public class RCTP2PTransferBLECentralModule extends ReactContextBaseJavaModule {
     sendValueInChunks(value.getBytes(Charset.forName("UTF-8")), characteristic, callback);
   }
 
-  @ReactMethod
-  void disconnect(String peripheralUUID, Callback callback) {
+  void closeGatt() {
     if(this.mGatt != null) {
-      this.mGatt.disconnect();
-      this.mDidDisconnectPeripheralCB = callback;
+      this.mGatt.close();
     }
-    else {
-      callback.invoke();
+
+    this.mGatt = null;
+    this.mGattService = null;
+    this.mGattCharacteristic = null;
+    this.mPeripheral = null;
+
+    if(this.mDidDisconnectPeripheralCB != null) {
+      this.mDidDisconnectPeripheralCB.invoke();
+      this.mDidDisconnectPeripheralCB = null;
     }
   }
 
@@ -444,24 +540,7 @@ public class RCTP2PTransferBLECentralModule extends ReactContextBaseJavaModule {
         break;
         case BluetoothProfile.STATE_DISCONNECTED:
           Log.e("gattCallback", "STATE_DISCONNECTED");
-
-          if(mGatt != null) {
-            mGatt.close();
-            mGatt = null;
-            mGattService = null;
-            mGattCharacteristic = null;
-            mPeripheral = null;
-          }
-
-          if(mDidConnectPeripheralCB != null) {
-            mDidConnectPeripheralCB.invoke();
-            mDidConnectPeripheralCB = null;
-          }
-
-          if(mDidDisconnectPeripheralCB != null) {
-            mDidDisconnectPeripheralCB.invoke();
-            mDidDisconnectPeripheralCB = null;
-          }
+          closeGatt();
         break;
         default:
           Log.e("gattCallback", "STATE_OTHER");
@@ -686,7 +765,10 @@ public class RCTP2PTransferBLECentralModule extends ReactContextBaseJavaModule {
       WritableMap retObject = Arguments.createMap();
       retObject.putString("peripheralUUID", peripheralUUID);
 
-      mFoundPeripheralCallback.invoke(retObject);
+      if(mFoundPeripheralCallback != null) {
+        mFoundPeripheralCallback.invoke(retObject);
+        mFoundPeripheralCallback = null;
+      }
     }
 
     @Override
@@ -701,7 +783,10 @@ public class RCTP2PTransferBLECentralModule extends ReactContextBaseJavaModule {
       WritableMap retObject = Arguments.createMap();
       retObject.putString("peripheralUUID", peripheralUUID);
 
-      mFoundPeripheralCallback.invoke(retObject);
+      if(mFoundPeripheralCallback != null) {
+        mFoundPeripheralCallback.invoke(retObject);
+        mFoundPeripheralCallback = null;
+      }
     }
 
     @Override

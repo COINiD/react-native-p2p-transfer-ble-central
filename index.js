@@ -84,13 +84,14 @@ class BLECentral extends EventEmitter {
         }
 
         this.disconnect().then(() => {
-          console.log("disconnected...");
+          console.log("disconnected... starting scanning");
 
           bleCentralModule.scanForPeripheralsWithServices({ serviceUUID, localName }, ({peripheralUUID}) => {
             console.log("found peripheral", peripheralUUID);
             bleCentralModule.stopScan();
 
             bleCentralModule.connect(peripheralUUID, connectedPeripheralUUID => {
+              console.log('connection?');
               if(peripheralUUID !== connectedPeripheralUUID) {
                 this.emit('connectionFailed');
                 return reject('Connection failed');
@@ -98,6 +99,7 @@ class BLECentral extends EventEmitter {
 
               this.connectedPeripheralUUID = connectedPeripheralUUID;
               
+              console.log('connected', connectedPeripheralUUID);
               this.emit('connected', connectedPeripheralUUID);
               return resolve(connectedPeripheralUUID);
             });
@@ -113,11 +115,17 @@ class BLECentral extends EventEmitter {
 
     return new Promise((resolve, reject) => {
       bleCentralModule.discoverServices(serviceUUID, data => {
-        // should reject if error
+        if(!data) {
+          reject('No services discovered');
+          return ;
+        }
         console.log("discovered serv...", data);
             
         bleCentralModule.discoverCharacteristics(serviceUUID, characteristicUUID, (data) => {
-          // should reject if error
+          if(!data) {
+            reject('No characteritics discovered');
+            return ;
+          }
           console.log("discover char...", data);
           return resolve(data);
         });
@@ -136,8 +144,8 @@ class BLECentral extends EventEmitter {
         this.discover(serviceUUID, characteristicUUID)
         .then(data => {
           return resolve(data);
-        });
-      });
+        }).catch(reject);
+      }).catch(reject);
     });
   }
 
@@ -152,25 +160,41 @@ class BLECentral extends EventEmitter {
 
       bleCentralModule.setSendCharacteristic(characteristicUUID);
 
-      this.connectAndDiscover({serviceUUID, localName, characteristicUUID})
-      .then(data => {
-        console.log("sendingStarted", data);
-        this.emit('sendingStarted', data);
+      var doConnection = (retryNum) => {
 
-        bleCentralEmitter.addListener('didWriteValueForCharacteristic', (data) => {
-          console.log('sendingProgress', data);
-          this.emit('sendingProgress', data);
+        this.connectAndDiscover({serviceUUID, localName, characteristicUUID})
+        .then(data => {
+          console.log("sendingStarted", data);
+          this.emit('sendingStarted', data);
+
+          bleCentralEmitter.addListener('didWriteValueForCharacteristic', (data) => {
+            console.log('sendingProgress', data);
+            this.emit('sendingProgress', data);
+          });
+
+          bleCentralModule.writeValueForCharacteristic(serviceUUID, characteristicUUID, value, () => {
+            console.log('sendingDone', data);
+
+            bleCentralEmitter.removeAllListeners('didWriteValueForCharacteristic');
+
+            this.emit('sendingDone', data);
+            return resolve();
+          });
+        })
+        .catch(error => {
+          console.log("Caught an error", error);
+          if(retryNum < 6) {
+            console.log("Retrying...", retryNum+1);
+            doConnection(retryNum+1);
+          }
+          else {
+            return reject('Error when connecting to device');
+          }
         });
 
-        bleCentralModule.writeValueForCharacteristic(serviceUUID, characteristicUUID, value, () => {
-          console.log('sendingDone', data);
-          
-          bleCentralEmitter.removeAllListeners('didWriteValueForCharacteristic');
+      }
 
-          this.emit('sendingDone', data);
-          return resolve();
-        });
-      });
+      doConnection(0);
     });
   }
 
@@ -186,50 +210,60 @@ class BLECentral extends EventEmitter {
       
       bleCentralModule.setReceiveCharacteristic(characteristicUUID);
 
-      this.connectAndDiscover({serviceUUID, localName, characteristicUUID})
-      .then(data => {
-        console.log('woop');
+      var doConnection = (retryNum) => {
+        this.connectAndDiscover({serviceUUID, localName, characteristicUUID})
+        .then(data => {
+          console.log('woop');
 
-        bleCentralModule.subscribeToCharacteristic(serviceUUID, characteristicUUID, (data) => {
-          console.log("subscribed...", data);
-          this.subscribedCharacteristic = { serviceUUID, characteristicUUID };
+          bleCentralModule.subscribeToCharacteristic(serviceUUID, characteristicUUID, (data) => {
+            console.log("subscribed...", data);
+            this.subscribedCharacteristic = { serviceUUID, characteristicUUID };
 
-          if(!data) {
-            reject('Error when subscribing to characteristic');
-            return ;
-          }
+            if(!data) {
+              reject('Error when subscribing to characteristic');
+              return ;
+            }
 
-          bleCentralEmitter.addListener('transferStarted', (data) => {
-            console.log('transferStarted', data);
-            bleCentralEmitter.removeAllListeners('transferStarted');
+            bleCentralEmitter.addListener('transferStarted', (data) => {
+              console.log('transferStarted', data);
+              bleCentralEmitter.removeAllListeners('transferStarted');
 
-            this.emit('receivingStarted', data);
-          });
+              this.emit('receivingStarted', data);
+            });
 
-          bleCentralEmitter.addListener('transferProgress', (data) => {
-            console.log('transferProgress', data);
+            bleCentralEmitter.addListener('transferProgress', (data) => {
+              console.log('transferProgress', data);
 
-            this.emit('receivingProgress', data);
-          });
+              this.emit('receivingProgress', data);
+            });
 
-          bleCentralEmitter.addListener('transferDone', (data) => {
-            console.log('transferDone', data);
+            bleCentralEmitter.addListener('transferDone', (data) => {
+              console.log('transferDone', data);
 
-            this.unsubscribe().then(() => {
-              bleCentralModule.writeValueForCharacteristic(serviceUUID, characteristicUUID, 'finished', () => {
-                this.disconnect().then(() => {
-                  this.emit('receivingDone', data);
-                  return resolve(data);
+              this.unsubscribe().then(() => {
+                bleCentralModule.writeValueForCharacteristic(serviceUUID, characteristicUUID, 'finished', () => {
+                  this.disconnect().then(() => {
+                    this.emit('receivingDone', data);
+                    return resolve(data);
+                  });
                 });
-              });
-            })
+              })
+            });
           });
+        })
+        .catch(error => {
+          console.log("Caught an error", error);
+          if(retryNum < 6) {
+            console.log("Retrying...", retryNum+1);
+            doConnection(retryNum+1);
+          }
+          else {
+            return reject('Error when connecting to device');
+          }
         });
+      }
 
-      })
-      .catch(() => {
-        return reject('Error when connecting to characteristic');
-      });
+      doConnection(0);
     });
   }
 }

@@ -21,12 +21,6 @@ import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
 
-/* Advertising (Peripheral) */
-import android.bluetooth.le.AdvertiseCallback;
-import android.bluetooth.le.AdvertiseData;
-import android.bluetooth.le.AdvertiseSettings;
-import android.bluetooth.le.BluetoothLeAdvertiser;
-
 /* React Native */
 import com.facebook.react.bridge.NativeModule;
 import com.facebook.react.bridge.ReactApplicationContext;
@@ -65,7 +59,6 @@ import java.nio.charset.Charset;
 
 import java.lang.Thread;
 
-@TargetApi(Build.VERSION_CODES.LOLLIPOP)
 public class RCTP2PTransferBLECentralModule extends ReactContextBaseJavaModule {
 
   private static final int REQUEST_ENABLE_BT = 1;

@@ -34,6 +34,11 @@ class BLECentral extends EventEmitter {
     });
   }
 
+  stop = () => {
+    this.disconnect();
+    bleCentralModule.stopScan();
+  }
+
   disconnect = () => {
     return new Promise((resolve, reject) => {
         if(this.connectedPeripheralUUID === undefined) {

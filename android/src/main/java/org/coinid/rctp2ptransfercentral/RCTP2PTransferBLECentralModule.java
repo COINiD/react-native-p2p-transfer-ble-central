@@ -465,6 +465,7 @@ public class RCTP2PTransferBLECentralModule extends ReactContextBaseJavaModule {
       filters.add(filter);
     }
 
+    this.mLeScanner.stopScan(mLeScanCallback);
     this.mLeScanner.startScan(filters, settings, mLeScanCallback);
   }
 

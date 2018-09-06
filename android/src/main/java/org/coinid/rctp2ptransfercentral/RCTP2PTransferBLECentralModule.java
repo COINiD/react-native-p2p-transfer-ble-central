@@ -407,6 +407,20 @@ public class RCTP2PTransferBLECentralModule extends ReactContextBaseJavaModule {
   }
 
   @ReactMethod
+  public void isSupported(Callback callback) {
+    if (null == this.mContext.getSystemService(Context.BLUETOOTH_SERVICE) ||
+        false == this.mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE) ||
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+
+      callback.invoke(false);
+      return ;
+    }
+
+    callback.invoke(true);
+  }
+
+
+  @ReactMethod
   public void setSendCharacteristic(String characteristicUUID) {
     this.mSendCharacteristicUUID = getUUIDStringFromSimple(characteristicUUID);
   }

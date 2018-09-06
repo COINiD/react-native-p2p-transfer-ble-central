@@ -20,6 +20,9 @@ RCT_EXPORT_MODULE();
       NSLog(@"RCTP2PTransferBLECentralModule created");
       _callbacks = [NSMutableDictionary dictionary];
       _isPoweredOn = NO;
+
+      NSDictionary *options = @{CBCentralManagerOptionShowPowerAlertKey: @NO};
+      _manager = [[CBCentralManager alloc] initWithDelegate:self queue:dispatch_get_main_queue() options:options];
     }
     
     return self;
@@ -31,6 +34,17 @@ RCT_EXPORT_MODULE();
 }
 
 /* Exported Methods */
+RCT_EXPORT_METHOD(isSupported:(nonnull RCTResponseSenderBlock)callback)
+{
+  NSString *state = [self NSStringForCBManagerState:[_manager state]];
+
+  if([state isEqualToString: @"unsupported"]) {
+    callback(@[@(NO)]);
+    return ;
+  }
+
+  callback(@[@(YES)]);
+}
 
 RCT_EXPORT_METHOD(start:(nonnull RCTResponseSenderBlock)callback)
 {
@@ -42,7 +56,6 @@ RCT_EXPORT_METHOD(start:(nonnull RCTResponseSenderBlock)callback)
   }
 
   [_callbacks setObject:callback forKey:@"startCB"];
-  _manager = [[CBCentralManager alloc] initWithDelegate:self queue:dispatch_get_main_queue()];
 }
 
 RCT_EXPORT_METHOD(scanForPeripheralsWithServices:(NSDictionary *)filter callback:(nonnull RCTResponseSenderBlock)callback)

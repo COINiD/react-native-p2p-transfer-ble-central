@@ -34,6 +34,14 @@ class BLECentral extends EventEmitter {
     });
   }
 
+  isSupported = () => {
+    return new Promise((resolve, reject) => {
+      bleCentralModule.isSupported((supported) => {
+        resolve(supported);
+      });
+    });
+  }
+
   stop = () => {
     this.disconnect();
     bleCentralModule.stopScan();

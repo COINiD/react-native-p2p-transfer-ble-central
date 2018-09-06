@@ -88,36 +88,41 @@ class BLECentral extends EventEmitter {
     const {serviceUUID, localName} = filter;
 
     return new Promise((resolve, reject) => {
-      bleCentralModule.start(started => {
-
-        console.log("module started and powered on");
-
-        if(!started) {
-          return reject('Failed to start BLE module');
+      this.isSupported().then((supported) => {
+        if(!supported) {
+          return reject("BLE is not supported on your device.");
         }
 
-        this.disconnect().then(() => {
-          console.log("disconnected... starting scanning");
+        bleCentralModule.start(started => {
 
-          bleCentralModule.scanForPeripheralsWithServices({ serviceUUID, localName }, ({peripheralUUID}) => {
-            console.log("found peripheral", peripheralUUID);
-            bleCentralModule.stopScan();
+          console.log("module started and powered on", started);
 
-            bleCentralModule.connect(peripheralUUID, connectedPeripheralUUID => {
-              console.log('connection?');
-              if(peripheralUUID !== connectedPeripheralUUID) {
-                this.emit('connectionFailed');
-                return reject('Connection failed');
-              }
+          if(!started) {
+            return reject('Unable to start. Make sure bluetooth is enabled.');
+          }
 
-              this.connectedPeripheralUUID = connectedPeripheralUUID;
-              
-              console.log('connected', connectedPeripheralUUID);
-              this.emit('connected', connectedPeripheralUUID);
-              return resolve(connectedPeripheralUUID);
+          this.disconnect().then(() => {
+            console.log("disconnected... starting scanning");
+
+            bleCentralModule.scanForPeripheralsWithServices({ serviceUUID, localName }, ({peripheralUUID}) => {
+              console.log("found peripheral", peripheralUUID);
+              bleCentralModule.stopScan();
+
+              bleCentralModule.connect(peripheralUUID, connectedPeripheralUUID => {
+                console.log('connection?');
+                if(peripheralUUID !== connectedPeripheralUUID) {
+                  this.emit('connectionFailed');
+                  return reject('Connection failed');
+                }
+
+                this.connectedPeripheralUUID = connectedPeripheralUUID;
+                
+                console.log('connected', connectedPeripheralUUID);
+                this.emit('connected', connectedPeripheralUUID);
+                return resolve(connectedPeripheralUUID);
+              });
             });
           });
-
         });
       });
     });
@@ -201,7 +206,7 @@ class BLECentral extends EventEmitter {
             doConnection(retryNum+1);
           }
           else {
-            return reject('Error when connecting to device');
+            return reject(error);
           }
         });
 
@@ -226,8 +231,6 @@ class BLECentral extends EventEmitter {
       var doConnection = (retryNum) => {
         this.connectAndDiscover({serviceUUID, localName, characteristicUUID})
         .then(data => {
-          console.log('woop');
-
           bleCentralModule.subscribeToCharacteristic(serviceUUID, characteristicUUID, (data) => {
             console.log("subscribed...", data);
             this.subscribedCharacteristic = { serviceUUID, characteristicUUID };
@@ -271,7 +274,7 @@ class BLECentral extends EventEmitter {
             doConnection(retryNum+1);
           }
           else {
-            return reject('Error when connecting to device');
+            return reject(error);
           }
         });
       }

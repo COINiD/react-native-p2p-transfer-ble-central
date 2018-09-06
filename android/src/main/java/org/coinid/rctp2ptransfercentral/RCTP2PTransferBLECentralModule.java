@@ -116,7 +116,7 @@ public class RCTP2PTransferBLECentralModule extends ReactContextBaseJavaModule {
     super(reactContext);
     this.mContext = reactContext;
 
-    if(this.init() == 0) {
+    if(this.checkSupport() == 0) {
       this.setupBLECallbacks();
     }
   };
@@ -360,7 +360,7 @@ public class RCTP2PTransferBLECentralModule extends ReactContextBaseJavaModule {
     };
   }
 
-  public Integer init() {
+  public Integer checkSupport() {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
       return -1;
     }
@@ -373,6 +373,14 @@ public class RCTP2PTransferBLECentralModule extends ReactContextBaseJavaModule {
       return -3;
     }
 
+    return 0;
+  }
+
+  public Integer setupModule() {
+    if(this.checkSupport() != 0) {
+      return -1;
+    }
+
     if (null == this.mManager) {
       this.mManager = (BluetoothManager) this.mContext.getSystemService(Context.BLUETOOTH_SERVICE);
     }
@@ -382,7 +390,7 @@ public class RCTP2PTransferBLECentralModule extends ReactContextBaseJavaModule {
     }
 
     if (null == this.mAdapter) {
-      return -4;
+      return -2;
     }
 
     if (null == this.mLeScanner) {
@@ -390,7 +398,19 @@ public class RCTP2PTransferBLECentralModule extends ReactContextBaseJavaModule {
     }
 
     if (null == this.mLeScanner) {
-      return -5;
+      return -3;
+    }
+
+    if(!this.mAdapter.isEnabled()) {
+      return -4;
+    }
+
+    return 0;
+  }
+
+  public Integer init() {
+    if(this.setupModule() != 0) {
+      return -1;
     }
 
     this.mConnectionMtu = 23;
@@ -408,17 +428,12 @@ public class RCTP2PTransferBLECentralModule extends ReactContextBaseJavaModule {
 
   @ReactMethod
   public void isSupported(Callback callback) {
-    if (null == this.mContext.getSystemService(Context.BLUETOOTH_SERVICE) ||
-        false == this.mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE) ||
-        Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
-
+    if(this.checkSupport() != 0) {
       callback.invoke(false);
-      return ;
+      return;
     }
-
     callback.invoke(true);
   }
-
 
   @ReactMethod
   public void setSendCharacteristic(String characteristicUUID) {
@@ -485,6 +500,14 @@ public class RCTP2PTransferBLECentralModule extends ReactContextBaseJavaModule {
 
   @ReactMethod
   public void stopScan() {
+    if (null == this.mLeScanner) {
+      return ;
+    }
+
+    if (null == this.mAdapter || !this.mAdapter.isEnabled()) {
+      return ;
+    }
+
     this.mLeScanner.stopScan(mLeScanCallback);
   }
 

@@ -19,7 +19,6 @@ RCT_EXPORT_MODULE();
     if (self = [super init]) {
       NSLog(@"RCTP2PTransferBLECentralModule created");
       _callbacks = [NSMutableDictionary dictionary];
-      _isPoweredOn = NO;
 
       NSDictionary *options = @{CBCentralManagerOptionShowPowerAlertKey: @NO};
       _manager = [[CBCentralManager alloc] initWithDelegate:self queue:dispatch_get_main_queue() options:options];
@@ -51,8 +50,14 @@ RCT_EXPORT_METHOD(start:(nonnull RCTResponseSenderBlock)callback)
   _finalBytes = nil;
 
   if(_manager) {
-    callback(@[@(_isPoweredOn)]);
-    return ;
+    if([_manager state] == CBCentralManagerStatePoweredOn) {
+      callback(@[@true]);
+      return;
+    }
+    else {
+      callback(@[@false]);
+      return ;
+    }
   }
 
   [_callbacks setObject:callback forKey:@"startCB"];
@@ -307,19 +312,22 @@ RCT_EXPORT_METHOD(unSubscribeToCharacteristic:(NSString *)serviceUUID characteri
 
 - (void)centralManagerDidUpdateState:(CBCentralManager *)central
 {
-  NSString *state = [self NSStringForCBManagerState:[central state]];
+  RCTResponseSenderBlock callback = [_callbacks objectForKey:@"startCB"];
 
-  if([state isEqualToString: @"poweredOn"]) {
-    _isPoweredOn = YES;
-
-    RCTResponseSenderBlock callback = [_callbacks objectForKey:@"startCB"];
+  if([central state] == CBCentralManagerStatePoweredOn) {
     if (callback) {
-      callback(@[@(_isPoweredOn)]);
       [_callbacks removeObjectForKey:@"startCB"];
+      callback(@[@true]);
+    }
+  }
+  else {
+    if (callback) {
+      [_callbacks removeObjectForKey:@"startCB"];
+      callback(@[@false]);
     }
   }
 
-  [self sendEventWithName:@"didUpdateState" body:state];
+  [self sendEventWithName:@"didUpdateState" body:[self NSStringForCBManagerState:[central state]]];
 }
 
 
@@ -431,9 +439,7 @@ RCT_EXPORT_METHOD(unSubscribeToCharacteristic:(NSString *)serviceUUID characteri
   }
 }
 
-
 /* Helpers */
-
 - (NSDictionary *)dictionaryForAdvertisementData:(NSDictionary *)advertisementData fromPeripheral:(CBPeripheral *)peripheral
 {
   NSMutableDictionary *advertisement = [NSMutableDictionary new];
@@ -487,17 +493,17 @@ RCT_EXPORT_METHOD(unSubscribeToCharacteristic:(NSString *)serviceUUID characteri
 - (NSString *)NSStringForCBManagerState:(CBManagerState)state
 {
   switch (state) {
-    case CBManagerStateResetting:
+    case CBCentralManagerStateResetting:
       return @"resetting";
-    case CBManagerStateUnsupported:
+    case CBCentralManagerStateUnsupported:
       return @"unsupported";
-    case CBManagerStateUnauthorized:
+    case CBCentralManagerStateUnauthorized:
       return @"unauthorized";
-    case CBManagerStatePoweredOff:
+    case CBCentralManagerStatePoweredOff:
       return @"poweredOff";
-    case CBManagerStatePoweredOn:
+    case CBCentralManagerStatePoweredOn:
       return @"poweredOn";
-    case CBManagerStateUnknown:
+    case CBCentralManagerStateUnknown:
     default:
       return @"unknown";
   }
@@ -522,7 +528,6 @@ RCT_EXPORT_METHOD(unSubscribeToCharacteristic:(NSString *)serviceUUID characteri
 
 }
 
-
 - (void)peripheral:(CBPeripheral *)peripheral didDiscoverCharacteristicsForService:(CBService *)service error:(NSError *)error {
   RCTResponseSenderBlock callback = [_callbacks objectForKey:@"discoverCharacteristicsCB"];
 
@@ -543,7 +548,6 @@ RCT_EXPORT_METHOD(unSubscribeToCharacteristic:(NSString *)serviceUUID characteri
     [_callbacks removeObjectForKey:@"discoverCharacteristicsCB"];
   }
 }
-
 
 - (void)peripheral:(CBPeripheral *)peripheral didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic error:(NSError *)error {
   RCTResponseSenderBlock callback = [_callbacks objectForKey:@"subscribeToCharacteristicCB"];
@@ -604,7 +608,6 @@ RCT_EXPORT_METHOD(unSubscribeToCharacteristic:(NSString *)serviceUUID characteri
   }
 }
 
-
 - (void)peripheral:(CBPeripheral *)peripheral didWriteValueForCharacteristic:(CBCharacteristic *)characteristic error:(NSError *)error {
   _chunkCount++;
 
@@ -631,6 +634,5 @@ RCT_EXPORT_METHOD(unSubscribeToCharacteristic:(NSString *)serviceUUID characteri
     }
   }
 }
-
 
 @end

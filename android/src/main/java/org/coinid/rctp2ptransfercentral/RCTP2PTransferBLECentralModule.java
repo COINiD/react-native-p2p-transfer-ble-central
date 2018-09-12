@@ -58,6 +58,7 @@ import java.nio.ByteOrder;
 import java.nio.charset.Charset;
 
 import java.lang.Thread;
+import java.lang.reflect.Method;
 
 public class RCTP2PTransferBLECentralModule extends ReactContextBaseJavaModule {
 
@@ -511,6 +512,22 @@ public class RCTP2PTransferBLECentralModule extends ReactContextBaseJavaModule {
     this.mLeScanner.stopScan(mLeScanCallback);
   }
 
+  private boolean refreshDeviceCache(BluetoothGatt gatt){
+    try {
+      BluetoothGatt localBluetoothGatt = gatt;
+      Method localMethod = localBluetoothGatt.getClass().getMethod("refresh", new Class[0]);
+      if (localMethod != null) {
+        boolean bool = ((Boolean) localMethod.invoke(localBluetoothGatt, new Object[0])).booleanValue();
+        Log.e("refreshDeviceCache", "Refreshed...");
+        return bool;
+      }
+      Log.e("refreshDeviceCache", "Could not refresh");
+    } 
+    catch (Exception localException) {
+      Log.e("refreshDeviceCache", "An exception occured while refreshing device");
+    }
+    return false;
+  }
 
   @ReactMethod
   public void connect(String peripheralUUID, Callback callback) {
@@ -582,9 +599,9 @@ public class RCTP2PTransferBLECentralModule extends ReactContextBaseJavaModule {
     this.mDiscoverServicesCB = callback;
     this.mDiscoverServiceUUID = serviceUUID;
 
+    // certain devices needs to refresh their cache
+    refreshDeviceCache(this.mGatt);
     this.mGatt.discoverServices();
-
-    // timout to reject???
   }
 
   @ReactMethod

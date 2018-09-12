@@ -115,9 +115,9 @@ class BLECentral extends EventEmitter {
                   return reject('Connection failed');
                 }
 
-                this.connectedPeripheralUUID = connectedPeripheralUUID;
-                
                 console.log('connected', connectedPeripheralUUID);
+
+                this.connectedPeripheralUUID = connectedPeripheralUUID;
                 this.emit('connected', connectedPeripheralUUID);
                 return resolve(connectedPeripheralUUID);
               });
@@ -129,7 +129,7 @@ class BLECentral extends EventEmitter {
   }
 
   discover = (serviceUUID, characteristicUUID) => {
-    console.log("start discover serv...");
+    console.log("start discover serv...", serviceUUID);
 
     return new Promise((resolve, reject) => {
       bleCentralModule.discoverServices(serviceUUID, data => {
@@ -138,10 +138,10 @@ class BLECentral extends EventEmitter {
           return ;
         }
         console.log("discovered serv...", data);
-            
+        
         bleCentralModule.discoverCharacteristics(serviceUUID, characteristicUUID, (data) => {
           if(!data) {
-            reject('No characteritics discovered');
+            reject('No characterictics discovered');
             return ;
           }
           console.log("discover char...", data);
@@ -256,7 +256,8 @@ class BLECentral extends EventEmitter {
             bleCentralEmitter.addListener('transferDone', (data) => {
               console.log('transferDone', data);
 
-              this.unsubscribe().then(() => {
+              this.unsubscribe()
+              .then(() => {
                 bleCentralModule.writeValueForCharacteristic(serviceUUID, characteristicUUID, 'finished', () => {
                   this.disconnect().then(() => {
                     this.emit('receivingDone', data);

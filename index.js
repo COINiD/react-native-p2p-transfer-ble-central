@@ -1,4 +1,4 @@
-import { NativeModules, NativeEventEmitter } from 'react-native';
+import { NativeModules, NativeEventEmitter, Platform, PermissionsAndroid } from 'react-native';
 
 import EventEmitter from 'react-native/Libraries/vendor/emitter/EventEmitter';
 
@@ -169,118 +169,151 @@ class BLECentral extends EventEmitter {
 
   sendData = (value, filter, sendCharacteristicUUID) => {
     return new Promise((resolve, reject) => {
-      const {serviceUUID, localName} = filter;
-      const characteristicUUID = sendCharacteristicUUID ? sendCharacteristicUUID : '3333'; // Special characteristic for sending data. Peripheral listens to this.
+      this.requestPermission().then(granted => {
+        if(!granted) {
+          return reject("Did not get users permission");
+        }
 
-      if(!serviceUUID) {
-        return reject("serviceUUID required filter");
-      }
+        const {serviceUUID, localName} = filter;
+        const characteristicUUID = sendCharacteristicUUID ? sendCharacteristicUUID : '3333'; // Special characteristic for sending data. Peripheral listens to this.
 
-      bleCentralModule.setSendCharacteristic(characteristicUUID);
+        if(!serviceUUID) {
+          return reject("serviceUUID required filter");
+        }
 
-      var doConnection = (retryNum) => {
+        bleCentralModule.setSendCharacteristic(characteristicUUID);
 
-        this.connectAndDiscover({serviceUUID, localName, characteristicUUID})
-        .then(data => {
-          console.log("sendingStarted", data);
-          this.emit('sendingStarted', data);
+        var doConnection = (retryNum) => {
 
-          bleCentralEmitter.addListener('didWriteValueForCharacteristic', (data) => {
-            console.log('sendingProgress', data);
-            this.emit('sendingProgress', data);
+          this.connectAndDiscover({serviceUUID, localName, characteristicUUID})
+          .then(data => {
+            console.log("sendingStarted", data);
+            this.emit('sendingStarted', data);
+
+            bleCentralEmitter.addListener('didWriteValueForCharacteristic', (data) => {
+              console.log('sendingProgress', data);
+              this.emit('sendingProgress', data);
+            });
+
+            bleCentralModule.writeValueForCharacteristic(serviceUUID, characteristicUUID, value, () => {
+              console.log('sendingDone', data);
+
+              bleCentralEmitter.removeAllListeners('didWriteValueForCharacteristic');
+
+              this.emit('sendingDone', data);
+              return resolve();
+            });
+          })
+          .catch(error => {
+            console.log("Caught an error", error);
+            if(retryNum < 6) {
+              console.log("Retrying...", retryNum+1);
+              doConnection(retryNum+1);
+            }
+            else {
+              return reject(error);
+            }
           });
 
-          bleCentralModule.writeValueForCharacteristic(serviceUUID, characteristicUUID, value, () => {
-            console.log('sendingDone', data);
+        }
 
-            bleCentralEmitter.removeAllListeners('didWriteValueForCharacteristic');
-
-            this.emit('sendingDone', data);
-            return resolve();
-          });
-        })
-        .catch(error => {
-          console.log("Caught an error", error);
-          if(retryNum < 6) {
-            console.log("Retrying...", retryNum+1);
-            doConnection(retryNum+1);
-          }
-          else {
-            return reject(error);
-          }
-        });
-
-      }
-
-      doConnection(0);
+        doConnection(0);
+      });
     });
+  }
+
+  requestPermission = async () => {
+    if (Platform.OS === 'android' && Platform.Version >= 23) {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+          {
+            'title': 'Location permission needed for BLE',
+            'message': 'In order to use bluetooth low energy Android apps needs the location permission.'
+          }
+        );
+
+        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+          return true;
+        }
+      } catch (err) { }
+      
+      return false;
+    }
+
+    return true;
   }
 
   receiveData = (filter, receiveCharacteristicUUID) => {
     return new Promise((resolve, reject) => {
+      this.requestPermission().then(granted => {
+        if(!granted) {
+          return reject("Did not get users permission");
+        }
 
-      const {serviceUUID, localName} = filter;
-      const characteristicUUID = receiveCharacteristicUUID ? receiveCharacteristicUUID : '2222'; // Special characteristic for receiving data. Peripheral starts sending once Central subscribes.
+        const {serviceUUID, localName} = filter;
+        const characteristicUUID = receiveCharacteristicUUID ? receiveCharacteristicUUID : '2222'; // Special characteristic for receiving data. Peripheral starts sending once Central subscribes.
 
-      if(!serviceUUID) {
-        return reject("serviceUUID required filter");
-      }
-      
-      bleCentralModule.setReceiveCharacteristic(characteristicUUID);
+        if(!serviceUUID) {
+          return reject("serviceUUID required filter");
+        }
+        
+        bleCentralModule.setReceiveCharacteristic(characteristicUUID);
 
-      var doConnection = (retryNum) => {
-        this.connectAndDiscover({serviceUUID, localName, characteristicUUID})
-        .then(data => {
-          bleCentralModule.subscribeToCharacteristic(serviceUUID, characteristicUUID, (data) => {
-            console.log("subscribed...", data);
-            this.subscribedCharacteristic = { serviceUUID, characteristicUUID };
+        var doConnection = (retryNum) => {
+          this.connectAndDiscover({serviceUUID, localName, characteristicUUID})
+          .then(data => {
+            bleCentralModule.subscribeToCharacteristic(serviceUUID, characteristicUUID, (data) => {
+              console.log("subscribed...", data);
+              this.subscribedCharacteristic = { serviceUUID, characteristicUUID };
 
-            if(!data) {
-              reject('Error when subscribing to characteristic');
-              return ;
-            }
+              if(!data) {
+                reject('Error when subscribing to characteristic');
+                return ;
+              }
 
-            bleCentralEmitter.addListener('transferStarted', (data) => {
-              console.log('transferStarted', data);
-              bleCentralEmitter.removeAllListeners('transferStarted');
+              bleCentralEmitter.addListener('transferStarted', (data) => {
+                console.log('transferStarted', data);
+                bleCentralEmitter.removeAllListeners('transferStarted');
 
-              this.emit('receivingStarted', data);
-            });
+                this.emit('receivingStarted', data);
+              });
 
-            bleCentralEmitter.addListener('transferProgress', (data) => {
-              console.log('transferProgress', data);
+              bleCentralEmitter.addListener('transferProgress', (data) => {
+                console.log('transferProgress', data);
 
-              this.emit('receivingProgress', data);
-            });
+                this.emit('receivingProgress', data);
+              });
 
-            bleCentralEmitter.addListener('transferDone', (data) => {
-              console.log('transferDone', data);
+              bleCentralEmitter.addListener('transferDone', (data) => {
+                console.log('transferDone', data);
 
-              this.unsubscribe()
-              .then(() => {
-                bleCentralModule.writeValueForCharacteristic(serviceUUID, characteristicUUID, 'finished', () => {
-                  this.disconnect().then(() => {
-                    this.emit('receivingDone', data);
-                    return resolve(data);
+                this.unsubscribe()
+                .then(() => {
+                  bleCentralModule.writeValueForCharacteristic(serviceUUID, characteristicUUID, 'finished', () => {
+                    this.disconnect().then(() => {
+                      this.emit('receivingDone', data);
+                      return resolve(data);
+                    });
                   });
-                });
-              })
+                })
+              });
             });
+          })
+          .catch(error => {
+            console.log("Caught an error", error);
+            if(retryNum < 6) {
+              console.log("Retrying...", retryNum+1);
+              doConnection(retryNum+1);
+            }
+            else {
+              return reject(error);
+            }
           });
-        })
-        .catch(error => {
-          console.log("Caught an error", error);
-          if(retryNum < 6) {
-            console.log("Retrying...", retryNum+1);
-            doConnection(retryNum+1);
-          }
-          else {
-            return reject(error);
-          }
-        });
-      }
+        }
 
-      doConnection(0);
+        doConnection(0);
+      })
     });
   }
 }

@@ -512,9 +512,9 @@ public class RCTP2PTransferBLECentralModule extends ReactContextBaseJavaModule {
     this.mLeScanner.stopScan(mLeScanCallback);
   }
 
-  private boolean refreshDeviceCache(BluetoothGatt gatt){
+  private boolean refreshDeviceCache(){
     try {
-      BluetoothGatt localBluetoothGatt = gatt;
+      BluetoothGatt localBluetoothGatt = this.mGatt;
       Method localMethod = localBluetoothGatt.getClass().getMethod("refresh", new Class[0]);
       if (localMethod != null) {
         boolean bool = ((Boolean) localMethod.invoke(localBluetoothGatt, new Object[0])).booleanValue();
@@ -600,7 +600,7 @@ public class RCTP2PTransferBLECentralModule extends ReactContextBaseJavaModule {
     this.mDiscoverServiceUUID = serviceUUID;
 
     // certain devices needs to refresh their cache
-    refreshDeviceCache(this.mGatt);
+    refreshDeviceCache();
     this.mGatt.discoverServices();
   }
 
